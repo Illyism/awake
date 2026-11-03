@@ -1,6 +1,6 @@
 cask "awake" do
   version "1.0.0"
-  sha256 "94cc7fc16bc8bc2f24c519f2cd39e80f6f2298b99396da651e662c7be655d6d8"
+  sha256 "585c1006ffa38bb1d0f7689909c31f909518e126f0803839be648a4edbb7c4d8"
 
   url "https://github.com/Illyism/awake/releases/download/v#{version}/Awake-#{version}-macos-arm64.dmg"
   name "Awake"

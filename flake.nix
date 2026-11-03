@@ -20,7 +20,7 @@
         let
           awake = pkgs.stdenvNoCC.mkDerivation {
             pname = "awake";
-            version = "1.0.0";
+            version = "1.0.1";
             src = ./.;
             dontBuild = true;
             installPhase = ''

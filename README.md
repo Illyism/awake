@@ -70,7 +70,9 @@ awake setup
 
 ### Option 4 — Download DMG
 
-Download **[Awake-1.0.0-macos-arm64.dmg](https://github.com/Illyism/awake/releases/download/v1.0.0/Awake-1.0.0-macos-arm64.dmg)** (Developer ID signed and notarized by Apple), drag `Awake.app` to `Applications`, launch it, and click **Enable Lid-Closed Sleep Guard (Touch ID)…** in the Awake menu bar icon.
+Download **[Awake-1.0.1-macos-arm64.dmg](https://github.com/Illyism/awake/releases/download/v1.0.1/Awake-1.0.1-macos-arm64.dmg)** (Developer ID signed and notarized by Apple), drag `Awake.app` to `Applications` and launch it. The Awake window walks you through setup: the lid-closed sleep guard (Touch ID), the Control Center toggle and the command line tool.
+
+Can't see the cup icon in the menu bar? On MacBooks with a notch, a full menu bar hides icons behind the camera. Hold ⌘ and drag other icons out to make room, open Awake again from Applications, or use the Control Center toggle.
 
 ### Option 5 — Nix (`flake.nix` / `nix-darwin`)
 

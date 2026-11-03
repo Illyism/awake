@@ -10,7 +10,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(sed -n 's/^AWAKE_VERSION="\([^"]*\)"/\1/p' "$ROOT/awake" | head -1)"
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.0.1}"
 DIST="$ROOT/dist"
 NOTARY_PROFILE="${AWAKE_NOTARY_PROFILE:-scribiz}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/awake-dmg.XXXXXX")"

@@ -1,6 +1,7 @@
 import AppKit
 import IOKit
 import ServiceManagement
+import SwiftUI
 import WidgetKit
 
 // `Awake --lock` locks the screen immediately on lid close.
@@ -30,6 +31,8 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var notifyPort: IONotificationPortRef?
     private var rootNote: io_object_t = IO_OBJECT_NULL
     private var statusItem: NSStatusItem?
+    private var welcomeWindow: NSWindow?
+    private let welcome = WelcomeModel()
     private let hideMenuBarKey = "hideMenuBarIcon"
     private let didConfigureLoginItemKey = "didConfigureLaunchAtLogin"
 
@@ -45,20 +48,88 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !UserDefaults.standard.bool(forKey: hideMenuBarKey) {
             setupStatusItem()
         }
+        configureWelcome()
         start()
+        if !launchedAsLoginItem, ProcessInfo.processInfo.systemUptime > 180 {
+            showWelcomeUnlessIntent()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        guard statusItem == nil else { return false }
-        // SetAwakeIntent (openAppWhenRun) also reopens the app, so wait briefly for it to record itself.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self, self.statusItem == nil,
-                  Date().timeIntervalSince(AwakeState.lastIntentRun) > 5
-            else { return }
-            UserDefaults.standard.set(false, forKey: self.hideMenuBarKey)
-            self.setupStatusItem()
-        }
+        showWelcomeUnlessIntent()
         return false
+    }
+
+    private var launchedAsLoginItem: Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              event.eventID == kAEOpenApplication
+        else { return false }
+        return event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+
+    /// SetAwakeIntent (openAppWhenRun) also launches or reopens the app, so wait briefly for it to record itself.
+    private func showWelcomeUnlessIntent() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, Date().timeIntervalSince(AwakeState.lastIntentRun) > 5 else { return }
+            self.showWelcome()
+        }
+    }
+
+    private func configureWelcome() {
+        welcome.setAwake = { [weak self] on, duration in
+            self?.welcome.busy = true
+            DispatchQueue.global().async {
+                try? AwakeState.set(on, duration: duration)
+                DispatchQueue.main.async {
+                    self?.welcome.busy = false
+                    self?.check()
+                }
+            }
+        }
+        welcome.enableGuard = { [weak self] in self?.setupSudoRule() }
+        welcome.installCLI = { [weak self] in
+            self?.installCLI()
+            self?.welcome.refresh()
+        }
+        welcome.toggleLaunchAtLogin = { [weak self] in
+            self?.toggleLaunchAtLogin()
+            self?.welcome.refresh()
+        }
+        welcome.quit = { NSApplication.shared.terminate(nil) }
+        welcome.isStatusItemHidden = { [weak self] in self?.isStatusItemHidden ?? true }
+    }
+
+    @objc private func showWelcome() {
+        if statusItem == nil {
+            UserDefaults.standard.set(false, forKey: hideMenuBarKey)
+            setupStatusItem()
+        }
+        let window = welcomeWindow ?? {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: WelcomeView(model: welcome)))
+            window.title = "Awake"
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            welcomeWindow = window
+            return window
+        }()
+        welcome.refresh()
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        // The status item gets its final menu bar position a moment after it is created.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.welcome.refresh() }
+    }
+
+    /// True when the menu bar icon cannot be seen: not placed, not allowed in the menu bar,
+    /// or pushed behind the camera notch by a full menu bar.
+    private var isStatusItemHidden: Bool {
+        guard let window = statusItem?.button?.window,
+              window.occlusionState.contains(.visible),
+              let screen = window.screen
+        else { return true }
+        guard let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return false }
+        let x = window.frame.midX - screen.frame.minX
+        return x > left.width && x < screen.frame.width - right.width
     }
 
     func start() {
@@ -145,6 +216,12 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
             stopItem.isEnabled = false
             menu.addItem(stopItem)
         }
+
+        menu.addItem(.separator())
+
+        let openItem = NSMenuItem(title: "Open Awake…", action: #selector(showWelcome), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
 
         menu.addItem(.separator())
 
@@ -325,6 +402,9 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ControlCenter.shared.reloadAllControls()
         }
         updateStatusItem()
+        if welcomeWindow?.isVisible == true {
+            welcome.refresh()
+        }
         if pausedOrphan {
             DispatchQueue.global().async { AwakeState.resumeWatcher() }
         }

@@ -6,7 +6,7 @@ emulate -L zsh
 zmodload zsh/datetime 2>/dev/null || true
 for _fd in {3..9}; do eval "exec ${_fd}>&- ${_fd}<&-" 2>/dev/null || true; done
 
-AWAKE_VERSION="1.0.0"
+AWAKE_VERSION="1.0.1"
 CACHE="$HOME/.cache/awake"
 if [[ -L $CACHE ]]; then
   print "Refusing symlinked cache directory: $CACHE" >&2

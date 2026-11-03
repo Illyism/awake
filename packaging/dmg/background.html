@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 660px;
+      height: 400px;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 38%, rgba(245, 158, 11, 0.14), rgba(7, 7, 7, 1) 68%), #070707;
+      color: #f2f2ef;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      position: relative;
+    }
+    .grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 30px 30px;
+      mask-image: radial-gradient(ellipse at 50% 45%, black 30%, transparent 80%);
+    }
+    .title {
+      position: absolute;
+      top: 34px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(242, 242, 239, 0.55);
+    }
+    .arrow {
+      position: absolute;
+      top: 174px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #f59e0b;
+      filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.45));
+    }
+    .footer {
+      position: absolute;
+      bottom: 28px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 12px;
+      color: rgba(242, 242, 239, 0.42);
+      letter-spacing: -0.01em;
+    }
+    .footer code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      color: rgba(245, 158, 11, 0.85);
+      background: rgba(245, 158, 11, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="title">Awake for macOS</div>
+  <div class="arrow">
+    <svg width="68" height="24" viewBox="0 0 68 24" fill="none">
+      <path d="M4 12H60M52 5L61 12L52 19" stroke="#F59E0B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="footer">
+    Drag <strong>Awake</strong> to <strong>Applications</strong>, or run <code>curl -fsSL https://il.ly/awake/install.sh | sh</code>
+  </div>
+</body>
+</html>

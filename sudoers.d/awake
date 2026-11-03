@@ -1,0 +1,5 @@
+# Lets `awake` / `asleep` toggle lid sleep without a password prompt,
+# so the background watcher and the Control Center toggle can always
+# restore sleep. Only these two exact commands are allowed.
+# Install: sudo install -m 0440 -o root -g wheel sudoers.d/awake /etc/sudoers.d/awake
+%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1

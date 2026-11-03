@@ -1,0 +1,58 @@
+name: Awake
+options:
+  bundleIdPrefix: com.illyism
+  deploymentTarget:
+    macOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development"
+    DEVELOPMENT_TEAM: ""
+    PROVISIONING_PROFILE_SPECIFIER: ""
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Awake:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+      - Assets.xcassets
+      - path: ../awake
+        buildPhase: resources
+    info:
+      path: App/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: Awake
+        CFBundleIconFile: AppIcon
+        CFBundleIconName: AppIcon
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.illyism.awake
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - target: AwakeControl
+  AwakeControl:
+    type: app-extension
+    platform: macOS
+    sources: [Widget, Shared]
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Awake
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/AwakeControl.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.temporary-exception.files.home-relative-path.read-only:
+          - /.cache/awake/
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.illyism.awake.control
+        ENABLE_HARDENED_RUNTIME: YES

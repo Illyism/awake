@@ -1,0 +1,534 @@
+#!/bin/zsh
+# Keep this Mac awake, including when you close the lid.
+# Bare `caffeinate` only blocks idle sleep. Closing the lid still
+# triggers Clamshell Sleep, Wi-Fi drops, and in-flight CLI calls fail.
+emulate -L zsh
+zmodload zsh/datetime 2>/dev/null || true
+for _fd in {3..9}; do eval "exec ${_fd}>&- ${_fd}<&-" 2>/dev/null || true; done
+
+AWAKE_VERSION="1.0.0"
+CACHE="$HOME/.cache/awake"
+if [[ -L $CACHE ]]; then
+  print "Refusing symlinked cache directory: $CACHE" >&2
+  exit 1
+fi
+mkdir -p -m 700 "$CACHE"
+if [[ ! -O $CACHE ]]; then
+  print "Refusing cache directory not owned by current user: $CACHE" >&2
+  exit 1
+fi
+chmod 700 "$CACHE"
+
+PIDFILE="$CACHE/caffeinate.pid"
+WATCHFILE="$CACHE/watch.pid"
+PAUSEDFILE="$CACHE/paused"
+UNTILFILE="$CACHE/until"
+LASTSTOP="$CACHE/last_stop"
+PMSET=/usr/bin/pmset
+# On battery at or below this percent, awake pauses itself.
+MIN_BATTERY=${AWAKE_MIN_BATTERY:-10}
+# Lid closed (in a bag): pause at low battery or on heat.
+MIN_BATTERY_LID=${AWAKE_MIN_BATTERY_LID:-10}
+# Battery temperature in C, and macOS thermal pressure level
+# (0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping).
+MAX_BATT_TEMP_LID=${AWAKE_MAX_BATT_TEMP_LID:-40}
+MAX_THERMAL_LID=${AWAKE_MAX_THERMAL_LID:-1}
+
+write_atomic() {
+  local dest="$1" val="$2" tmp="$1.tmp.$$"
+  [[ ! -L $dest && ! -L $tmp ]] || return 1
+  print -r -- "$val" >"$tmp" && mv -f "$tmp" "$dest"
+}
+
+usage() {
+  print "Keep this Mac awake, including when you close the lid."
+  print "  awake            until asleep"
+  print "  awake 45m        duration (s / m / h, or minutes)"
+  print "  awake -- cmd     while cmd runs"
+  print "  asleep           restore sleep"
+  print "  awake status     show state, timer, thermal & battery"
+  print "  awake setup      install passwordless pmset sudo rule"
+  print "On battery at ${MIN_BATTERY}% or less, awake pauses and resumes when charged."
+  print "Lid closed: pauses at ${MIN_BATTERY_LID}% battery or >=${MAX_BATT_TEMP_LID}C, and resumes when calm."
+}
+
+seconds_from() {
+  local spec="$1"
+  [[ $spec =~ '^([0-9]+)([smhSMH])?$' ]] || return 1
+  local n=$match[1] unit=${match[2]:l}
+  (( n > 0 )) || return 1
+  case $unit in
+    s) print $n ;;
+    h) print $(( n * 3600 )) ;;
+    *) print $(( n * 60 )) ;;
+  esac
+}
+
+fmt_duration() {
+  local s=$1
+  if (( s <= 0 )); then
+    print "0s"
+  elif (( s % 3600 == 0 )); then
+    print "$((s / 3600))h"
+  elif (( s >= 3600 )); then
+    print "$((s / 3600))h $(((s % 3600 + 59) / 60))m"
+  elif (( s % 60 == 0 )); then
+    print "$((s / 60))m"
+  elif (( s >= 60 )); then
+    print "$((s / 60))m $((s % 60))s"
+  else
+    print "${s}s"
+  fi
+}
+
+live_pid() {
+  [[ -f $1 && ! -L $1 ]] || return 1
+  local pid=$(<"$1")
+  [[ $pid == <-> ]] && (( pid > 1 )) && kill -0 "$pid" 2>/dev/null || return 1
+  print "$pid"
+}
+
+caffeinate_pid() {
+  local pid
+  pid=$(live_pid "$PIDFILE") || return 1
+  # After a reboot the pid may belong to something else.
+  [[ $(ps -p "$pid" -o comm= 2>/dev/null) == *caffeinate ]] || return 1
+  print "$pid"
+}
+
+stop_watcher() {
+  local pid
+  pid=$(live_pid "$WATCHFILE") && kill "$pid" 2>/dev/null
+  rm -f "$WATCHFILE"
+}
+
+lid_closed() {
+  [[ $(ioreg -r -k AppleClamshellState -d 1 2>/dev/null) == *'"AppleClamshellState" = Yes'* ]]
+}
+
+console_locked() {
+  [[ $(ioreg -n Root -d1 2>/dev/null) == *'"IOConsoleLocked" = Yes'* ]]
+}
+
+awake_app_bin() {
+  local candidate
+  for candidate in \
+    "/Applications/Awake.app/Contents/MacOS/Awake" \
+    "$HOME/Applications/Awake.app/Contents/MacOS/Awake"; do
+    if [[ -x $candidate && ! -L $candidate ]]; then
+      print "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Lock loginwindow on lid close without sleeping the display or Wi-Fi.
+lock_screen() {
+  console_locked && return 0
+  local bin
+  if bin=$(awake_app_bin); then
+    "$bin" --lock </dev/null >/dev/null 2>&1
+  else
+    /usr/bin/python3 -c 'import ctypes; ctypes.CDLL("/System/Library/PrivateFrameworks/login.framework/login").SACLockScreenImmediate()' </dev/null >/dev/null 2>&1 || true
+  fi
+}
+
+battery_temp_c() {
+  local smart
+  smart=$(ioreg -rn AppleSmartBattery 2>/dev/null)
+  if [[ $smart =~ '"Temperature" = ([0-9]+)' ]]; then
+    print "$((match[1] / 100))"
+    return 0
+  fi
+  return 1
+}
+
+# Prints why awake should pause/stay paused now, or returns 1 when safe.
+# Pass 1 for resume hysteresis (+4% battery floor, -2C temp ceiling).
+stop_reason() {
+  local hyst=${1:-0} batt pct floor=$MIN_BATTERY closed=0 smart level
+  lid_closed && closed=1
+  (( closed )) && floor=$MIN_BATTERY_LID
+  (( hyst )) && floor=$((floor + 4))
+  batt=$($PMSET -g batt)
+  if [[ $batt == *"Battery Power"* && $batt =~ '([0-9]+)%' ]]; then
+    pct=$match[1]
+    if (( pct <= floor )); then
+      print "battery at ${pct}%"
+      return 0
+    fi
+  fi
+  (( closed )) || return 1
+  smart=$(ioreg -rn AppleSmartBattery 2>/dev/null)
+  if [[ $smart =~ '"Temperature" = ([0-9]+)' ]] && (( match[1] / 100 >= MAX_BATT_TEMP_LID - (hyst ? 2 : 0) )); then
+    print "lid closed and battery at $((match[1] / 100))C"
+    return 0
+  fi
+  level=$(notifyutil -g com.apple.system.thermalpressurelevel 2>/dev/null)
+  level=${level##* }
+  if [[ $level == <-> ]] && (( level >= MAX_THERMAL_LID )); then
+    print "lid closed and thermal pressure level $level"
+    return 0
+  fi
+  return 1
+}
+
+# Refresh the Control Center toggle / Menu Bar item (Awake.app), if installed.
+reload_control() {
+  local bin
+  if bin=$(awake_app_bin); then
+    ( "$bin" --reload </dev/null >/dev/null 2>&1 & )
+  fi
+}
+
+notify() {
+  /usr/bin/osascript - "$1" >/dev/null 2>&1 <<'EOF' || true
+on run argv
+  display notification (item 1 of argv) with title "awake"
+end run
+EOF
+}
+
+sleep_disabled() {
+  [[ $($PMSET -g) =~ 'SleepDisabled[[:space:]]+1' ]]
+}
+
+pmset_disablesleep() {
+  sudo -n $PMSET -a disablesleep $1 2>/dev/null ||
+    { [[ ${2:-1} == 1 ]] && sudo $PMSET -a disablesleep $1; }
+}
+
+enable_lid() {
+  sleep_disabled || pmset_disablesleep 1 "${1:-1}"
+}
+
+restore_lid() {
+  ! sleep_disabled || pmset_disablesleep 0 "${1:-1}"
+}
+
+# Optional user hook (~/.config/awake/on-sleep): called with `idle` or `sleep`
+# when closing the lid, pausing, or restoring sleep (e.g. to unmount encrypted volumes).
+run_sleep_hook() {
+  local mode="${1:-idle}"
+  local hook="$HOME/.config/awake/on-sleep"
+  [[ -f $hook && ! -L $hook && -O $hook && -x $hook ]] || return 0
+  "$hook" "$mode"
+}
+
+on_sleep_event() {
+  if caffeinate_pid >/dev/null && sleep_disabled; then
+    run_sleep_hook idle
+  else
+    run_sleep_hook sleep
+  fi
+}
+
+install_sudo_rule() {
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/awake-sudoers.XXXXXX") || return 1
+  cat >"$tmp" <<'EOF'
+# Lets `awake` / `asleep` toggle lid sleep without a password prompt,
+# so the background watcher and the Control Center toggle can always
+# restore sleep. Only these two exact commands are allowed.
+%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
+EOF
+  if ! /usr/sbin/visudo -cf "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    print "Failed to validate sudoers rule." >&2
+    return 1
+  fi
+  if sudo install -m 0440 -o root -g wheel "$tmp" /etc/sudoers.d/awake; then
+    rm -f "$tmp"
+    print "Installed /etc/sudoers.d/awake."
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+stop() {
+  local pid
+  stop_watcher
+  if pid=$(caffeinate_pid); then
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+  fi
+  rm -f "$PIDFILE" "$PAUSEDFILE" "$UNTILFILE" "$CACHE/sleepdisabled"
+  restore_lid
+  reload_control
+  print "Sleep restored."
+  run_sleep_hook idle
+}
+
+status() {
+  local pid rem="" end_ts temp
+  if [[ -f $UNTILFILE && ! -L $UNTILFILE ]]; then
+    end_ts=$(<"$UNTILFILE")
+    if [[ $end_ts == <-> ]] && (( end_ts > EPOCHSECONDS )); then
+      rem=" ($(fmt_duration $((end_ts - EPOCHSECONDS))) left)"
+    fi
+  fi
+  if pid=$(caffeinate_pid); then
+    print "awake  caffeinate pid ${pid}${rem}"
+  elif [[ -f $PAUSEDFILE ]] && live_pid "$WATCHFILE" >/dev/null; then
+    print "awake  paused ($(<"$PAUSEDFILE") — will resume when calm)${rem}"
+    rm -f "$PIDFILE"
+  else
+    print "awake  off"
+    rm -f "$PIDFILE" "$PAUSEDFILE" "$UNTILFILE"
+  fi
+  if sleep_disabled; then
+    if [[ -n $pid ]]; then
+      print "lid    sleep disabled"
+    else
+      print "lid    sleep still disabled from a dead session. Run: asleep"
+    fi
+  else
+    print "lid    will sleep on close"
+  fi
+  if temp=$(battery_temp_c); then
+    print "temp   ${temp}C (lid limit ${MAX_BATT_TEMP_LID}C)"
+  fi
+  [[ -f $LASTSTOP ]] && print "last   auto-stop: $(<"$LASTSTOP")"
+  $PMSET -g batt | sed 's/^/power  /'
+}
+
+spawn_caffeinate() {
+  local secs=${1:-0} watch_pid=${2:-0}
+  local -a args=(-dims)
+  (( secs > 0 )) && args+=(-t "$secs")
+  (( watch_pid > 0 )) && args+=(-w "$watch_pid")
+  caffeinate "$args[@]" </dev/null >/dev/null 2>&1 &
+  write_atomic "$PIDFILE" "$!"
+}
+
+watch_caffeinate() {
+  local pid=$1 can_resume=${2:-0} end_ts=${3:-0}
+  if (( end_ts > 0 )); then
+    write_atomic "$UNTILFILE" "$end_ts"
+  else
+    rm -f "$UNTILFILE"
+  fi
+  (
+    trap 'exit 0' TERM INT
+    local n=0 hot=0 calm=0 closed=0 was_closed=0 reason="" cand="" stamp="" rem=0
+    lid_closed && was_closed=1
+    while true; do
+      # Phase 1: Monitor active caffeinate
+      if (( pid > 0 )); then
+        reason=""
+        while kill -0 "$pid" 2>/dev/null; do
+          sleep 2
+          if (( end_ts > 0 && EPOCHSECONDS >= end_ts )); then
+            can_resume=0
+            kill "$pid" 2>/dev/null
+            break
+          fi
+          closed=0
+          lid_closed && closed=1
+          if (( closed && ! was_closed )); then
+            lock_screen
+            run_sleep_hook idle
+          fi
+          was_closed=$closed
+          if (( ++n % 15 == 0 )); then
+            if ! sleep_disabled && ! pmset_disablesleep 1 0; then
+              reason="lid sleep was re-enabled" can_resume=0
+              kill "$pid" 2>/dev/null
+              break
+            fi
+            if cand=$(stop_reason 0); then
+              if [[ $cand == battery* ]] || (( ++hot >= 2 )); then
+                reason="$cand"
+                break
+              fi
+            else
+              hot=0
+            fi
+          fi
+        done
+
+        [[ -f $PIDFILE && $(<"$PIDFILE") == $pid ]] || exit 0
+        stamp="${reason}, $(date '+%a %H:%M')"
+        if [[ -z $reason ]] || (( ! can_resume )) || ! kill -0 "$pid" 2>/dev/null; then
+          rm -f "$PIDFILE" "$PAUSEDFILE" "$UNTILFILE" "$WATCHFILE"
+          [[ -n $reason ]] && write_atomic "$LASTSTOP" "$stamp"
+          reload_control
+          if restore_lid 0; then
+            notify "Stopped${reason:+: $reason}. Sleep restored."
+          else
+            notify "Stopped${reason:+: $reason}, but lid sleep is still off. Run: asleep"
+          fi
+          run_sleep_hook sleep
+          exit 0
+        fi
+
+        write_atomic "$LASTSTOP" "$stamp"
+        write_atomic "$PAUSEDFILE" "$stamp"
+        rm -f "$PIDFILE"
+        kill "$pid" 2>/dev/null
+        wait "$pid" 2>/dev/null
+        if restore_lid 0; then
+          notify "Paused: $reason. Will resume when calm."
+        else
+          notify "Paused: $reason, but lid sleep is still off. Run: asleep"
+        fi
+        run_sleep_hook sleep
+        reload_control
+      fi
+
+      # Phase 2: Wait while paused until calm
+      calm=0
+      while [[ -f $PAUSEDFILE ]]; do
+        sleep 2
+        if (( end_ts > 0 && EPOCHSECONDS >= end_ts )); then
+          rm -f "$PAUSEDFILE" "$UNTILFILE" "$WATCHFILE"
+          reload_control
+          exit 0
+        fi
+        if stop_reason 1 >/dev/null; then
+          calm=0
+        elif (( ++calm >= 2 )); then
+          rem=0
+          if (( end_ts > 0 )); then
+            rem=$(( end_ts - EPOCHSECONDS ))
+            if (( rem <= 0 )); then
+              rm -f "$PAUSEDFILE" "$UNTILFILE" "$WATCHFILE"
+              reload_control
+              exit 0
+            fi
+          fi
+          if enable_lid 0; then
+            spawn_caffeinate "$rem" 0
+            disown
+            pid=$(<"$PIDFILE")
+            caffeinate -u -t 2 </dev/null >/dev/null 2>&1 &
+            rm -f "$PAUSEDFILE"
+            reload_control
+            notify "Resumed${reason:+ after $reason}. Awake again."
+            n=0 hot=0 was_closed=0 reason=""
+            lid_closed && was_closed=1
+            break
+          fi
+        fi
+      done
+      [[ -f $PIDFILE ]] || { rm -f "$UNTILFILE" "$WATCHFILE"; exit 0; }
+    done
+  ) </dev/null >/dev/null 2>&1 &
+  write_atomic "$WATCHFILE" "$!"
+  disown
+  reload_control
+}
+
+start_idle() {
+  local secs=${1:-0} end_ts=0 old_pid
+  (( secs > 0 )) && end_ts=$(( EPOCHSECONDS + secs ))
+  stop_watcher
+  if old_pid=$(caffeinate_pid); then
+    kill "$old_pid" 2>/dev/null
+    wait "$old_pid" 2>/dev/null
+  fi
+  rm -f "$PAUSEDFILE"
+  spawn_caffeinate "$secs" 0
+  disown
+  watch_caffeinate "$(<"$PIDFILE")" 1 "$end_ts"
+}
+
+note_on() {
+  print "Awake${1:+ for $1}. Lid can close. Wi-Fi stays up."
+  print "Stops on its own when the timer or command ends. Or run: asleep"
+  print "Pauses if battery drops to ${MIN_BATTERY}% (or runs hot with lid closed) and resumes when calm."
+}
+
+cmd=${0:t}
+[[ $cmd == asleep ]] && set -- stop "$@"
+
+case "$1" in
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  -v|--version|version)
+    print "awake $AWAKE_VERSION"
+    exit 0
+    ;;
+  setup)
+    install_sudo_rule
+    exit $?
+    ;;
+  stop|off)
+    if ! caffeinate_pid >/dev/null && ! sleep_disabled && [[ ! -f $PAUSEDFILE ]] && ! live_pid "$WATCHFILE" >/dev/null; then
+      print "Already asleep."
+      rm -f "$PIDFILE" "$WATCHFILE" "$PAUSEDFILE" "$UNTILFILE"
+      run_sleep_hook idle
+      exit 0
+    fi
+    stop
+    exit 0
+    ;;
+  status)
+    status
+    exit 0
+    ;;
+  is-on)
+    caffeinate_pid >/dev/null && sleep_disabled
+    exit $?
+    ;;
+  --on-sleep|--sleep-unmount)
+    on_sleep_event
+    exit 0
+    ;;
+  --resume)
+    [[ -f $PAUSEDFILE ]] || exit 0
+    live_pid "$WATCHFILE" >/dev/null && exit 0
+    caffeinate_pid >/dev/null && exit 0
+    end_ts=0
+    [[ -f $UNTILFILE && ! -L $UNTILFILE ]] && end_ts=$(<"$UNTILFILE")
+    [[ $end_ts == <-> ]] || end_ts=0
+    watch_caffeinate 0 1 "$end_ts"
+    exit 0
+    ;;
+esac
+
+# If already awake with no timer and no arguments passed, report already awake.
+if active_pid=$(caffeinate_pid) && sleep_disabled; then
+  if [[ -z $1 && ! -f $UNTILFILE ]]; then
+    print "Already awake (pid $active_pid). Stop with: asleep" >&2
+    exit 0
+  fi
+fi
+
+secs=""
+if secs=$(seconds_from "$1" 2>/dev/null); then
+  shift
+fi
+[[ $1 == -- ]] && shift
+
+if ! enable_lid; then
+  print "Lid close will still sleep this Mac. CLI calls will drop." >&2
+  print "Run: awake setup   (or: sudo install -m 0440 -o root -g wheel sudoers.d/awake /etc/sudoers.d/awake)" >&2
+  exit 1
+fi
+
+if (( $# )); then
+  stop_watcher
+  if old_pid=$(caffeinate_pid); then
+    kill "$old_pid" 2>/dev/null
+    wait "$old_pid" 2>/dev/null
+  fi
+  rm -f "$PAUSEDFILE" "$UNTILFILE"
+  trap 'stop; exit 130' INT TERM
+  note_on "${secs:+$(fmt_duration $secs)}"
+  spawn_caffeinate "${secs:-0}" "$$"
+  disown
+  watch_caffeinate "$(<"$PIDFILE")" 0 "${secs:+$(( EPOCHSECONDS + secs ))}"
+  "$@"
+  ec=$?
+  trap - INT TERM
+  stop
+  exit $ec
+fi
+
+start_idle "${secs:-0}"
+note_on "${secs:+$(fmt_duration $secs)}"

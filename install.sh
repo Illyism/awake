@@ -8,14 +8,17 @@ set -eu
 
 AWAKE_VERSION="1.0.0"
 REPO_TARBALL="https://github.com/Illyism/awake/archive/refs/tags/v${AWAKE_VERSION}.tar.gz"
-REPO_TARBALL_FALLBACK="https://github.com/Illyism/awake/archive/refs/heads/main.tar.gz"
 RELEASE_ZIP_URL="https://github.com/Illyism/awake/releases/download/v${AWAKE_VERSION}/Awake-${AWAKE_VERSION}-macos-arm64.zip"
-RELEASE_ZIP_SHA256="1b30d0ebe57c592852870fe48f3a0d082b91cbdfeb6e5038153bd7023a6eaaa2"
+RELEASE_ZIP_SHA256="cb523e6a09b8ac36e0eec7a15e748721b2416cc9f52ea326afbcf9bd826a7cc4"
 
 INSTALL_BIN_DIR="${AWAKE_BIN_DIR:-$HOME/.local/bin}"
 SHARE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/awake"
 CACHE_DIR="$HOME/.cache/awake"
-APP_DIR="${AWAKE_APP_DIR:-$HOME/Applications}"
+DEFAULT_APP_DIR="$HOME/Applications"
+if [ -d "/Applications/Awake.app" ] && [ -w "/Applications" ]; then
+  DEFAULT_APP_DIR="/Applications"
+fi
+APP_DIR="${AWAKE_APP_DIR:-$DEFAULT_APP_DIR}"
 APP_BUNDLE="$APP_DIR/Awake.app"
 SUDOERS_PATH="/etc/sudoers.d/awake"
 
@@ -46,7 +49,10 @@ uninstall() {
   fi
   killall Awake AwakeControl 2>/dev/null || true
 
-  rm -rf "$APP_BUNDLE" "$SHARE_DIR" "$CACHE_DIR"
+  rm -rf "$HOME/Applications/Awake.app" "$SHARE_DIR" "$CACHE_DIR"
+  if [ -d "/Applications/Awake.app" ] && [ -w "/Applications" ]; then
+    rm -rf "/Applications/Awake.app"
+  fi
   rm -f "$INSTALL_BIN_DIR/awake" "$INSTALL_BIN_DIR/asleep"
 
   if [ -f "$SUDOERS_PATH" ]; then
@@ -81,13 +87,9 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/awake" ] && [ -d "$SCRIPT_DIR/contr
 else
   LOCAL_CHECKOUT=0
   printf 'Downloading Awake %s from GitHub...\n' "$AWAKE_VERSION"
-  if ! curl --location --proto '=https' --proto-redir '=https' \
+  curl --location --proto '=https' --proto-redir '=https' \
     --silent --show-error --fail --connect-timeout 10 --max-time 60 \
-    "$REPO_TARBALL" -o "$WORK/awake.tar.gz" 2>/dev/null; then
-    curl --location --proto '=https' --proto-redir '=https' \
-      --silent --show-error --fail --connect-timeout 10 --max-time 60 \
-      "$REPO_TARBALL_FALLBACK" -o "$WORK/awake.tar.gz"
-  fi
+    "$REPO_TARBALL" -o "$WORK/awake.tar.gz"
   tar -xzf "$WORK/awake.tar.gz" -C "$WORK"
   SRC_DIR="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d -name 'awake-*' | head -1)"
   [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/awake" ] || fail "Downloaded archive did not contain awake."
@@ -96,15 +98,19 @@ fi
 safe_dir "$CACHE_DIR"
 chmod 700 "$CACHE_DIR"
 safe_dir "$INSTALL_BIN_DIR"
-safe_dir "$APP_DIR"
+if [ "$APP_DIR" != "/Applications" ]; then
+  safe_dir "$APP_DIR"
+fi
 
 # Install CLI script
 if [ "$LOCAL_CHECKOUT" = 1 ]; then
   chmod +x "$SRC_DIR/awake"
+  xattr -d com.apple.quarantine "$SRC_DIR/awake" 2>/dev/null || true
   ln -sf "$SRC_DIR/awake" "$INSTALL_BIN_DIR/awake"
 else
   safe_dir "$SHARE_DIR"
   install -m 0755 "$SRC_DIR/awake" "$SHARE_DIR/awake"
+  xattr -d com.apple.quarantine "$SHARE_DIR/awake" 2>/dev/null || true
   ln -sf "$SHARE_DIR/awake" "$INSTALL_BIN_DIR/awake"
 fi
 ln -sf awake "$INSTALL_BIN_DIR/asleep"
@@ -123,6 +129,7 @@ fi
 
 # Build Awake.app from source if full Xcode is active, else download release bundle
 BUILT_APP=""
+TEAM=""
 if xcodebuild -version >/dev/null 2>&1; then
   TEAM="${DEVELOPMENT_TEAM:-}"
   if [ -z "$TEAM" ]; then
@@ -169,6 +176,7 @@ if [ -n "$BUILT_APP" ] && [ -d "$BUILT_APP" ]; then
   killall Awake AwakeControl 2>/dev/null || true
   rm -rf "$APP_BUNDLE"
   /usr/bin/ditto "$BUILT_APP" "$APP_BUNDLE"
+  xattr -dr com.apple.quarantine "$APP_BUNDLE" 2>/dev/null || true
   open -g "$APP_BUNDLE" || true
   "$APP_BUNDLE/Contents/MacOS/Awake" --reload 2>/dev/null || true
 fi
@@ -196,8 +204,10 @@ fi
 printf '\nInstalled Awake %s\n' "$AWAKE_VERSION"
 printf '  CLI:            %s/awake (and asleep)\n' "$INSTALL_BIN_DIR"
 if [ -d "$APP_BUNDLE" ]; then
-  printf '  App:            %s\n' "$APP_BUNDLE"
-  printf '  Control Center: Control Center -> Edit Controls -> search "Awake"\n'
+  printf '  App:            %s (Menu Bar cup icon active)\n' "$APP_BUNDLE"
+  if [ -n "$TEAM" ]; then
+    printf '  Control Center: Control Center -> Edit Controls -> search "Awake"\n'
+  fi
 fi
 case ":${PATH:-}:" in
   *":$INSTALL_BIN_DIR:"*) ;;

@@ -34,7 +34,9 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let didConfigureLoginItemKey = "didConfigureLaunchAtLogin"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if !UserDefaults.standard.bool(forKey: didConfigureLoginItemKey) {
+        let bundlePath = Bundle.main.bundlePath
+        let isMountedVolume = bundlePath.hasPrefix("/Volumes/") || bundlePath.contains("/AppTranslocation/")
+        if !isMountedVolume, !UserDefaults.standard.bool(forKey: didConfigureLoginItemKey) {
             UserDefaults.standard.set(true, forKey: didConfigureLoginItemKey)
             if SMAppService.mainApp.status != .enabled {
                 try? SMAppService.mainApp.register()
@@ -44,6 +46,19 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setupStatusItem()
         }
         start()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard statusItem == nil else { return false }
+        // SetAwakeIntent (openAppWhenRun) also reopens the app, so wait briefly for it to record itself.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, self.statusItem == nil,
+                  Date().timeIntervalSince(AwakeState.lastIntentRun) > 5
+            else { return }
+            UserDefaults.standard.set(false, forKey: self.hideMenuBarKey)
+            self.setupStatusItem()
+        }
+        return false
     }
 
     func start() {
@@ -161,6 +176,15 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let sudoItem = NSMenuItem(title: "Enable Lid-Closed Sleep Guard (Touch ID)…", action: #selector(setupSudoRule), keyEquivalent: "")
             sudoItem.target = self
             menu.addItem(sudoItem)
+        }
+
+        if !AwakeState.isCLIInstalled {
+            let cliItem = NSMenuItem(title: "Install Command Line Tool (~/.local/bin/awake)", action: #selector(installCLI), keyEquivalent: "")
+            cliItem.target = self
+            menu.addItem(cliItem)
+        }
+
+        if !AwakeState.isSudoRuleInstalled || !AwakeState.isCLIInstalled {
             menu.addItem(.separator())
         }
 
@@ -207,6 +231,10 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
             _ = AwakeState.installSudoRuleInteractive()
             DispatchQueue.main.async { self?.check() }
         }
+    }
+
+    @objc private func installCLI() {
+        _ = AwakeState.installCLISymlinks()
     }
 
     @objc private func toggleLaunchAtLogin() {

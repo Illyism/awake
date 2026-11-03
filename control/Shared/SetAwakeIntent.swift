@@ -1,4 +1,5 @@
 import AppIntents
+import Foundation
 
 struct SetAwakeIntent: SetValueIntent {
     static let title: LocalizedStringResource = "Keep Awake"
@@ -9,6 +10,7 @@ struct SetAwakeIntent: SetValueIntent {
     var value: Bool
 
     func perform() async throws -> some IntentResult {
+        AwakeState.lastIntentRun = Date()
         try AwakeState.set(value)
         return .result()
     }

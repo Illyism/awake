@@ -129,7 +129,7 @@ lock_screen() {
   local bin
   if bin=$(awake_app_bin); then
     "$bin" --lock </dev/null >/dev/null 2>&1
-  else
+  elif xcode-select -p >/dev/null 2>&1; then
     /usr/bin/python3 -c 'import ctypes; ctypes.CDLL("/System/Library/PrivateFrameworks/login.framework/login").SACLockScreenImmediate()' </dev/null >/dev/null 2>&1 || true
   fi
 }
@@ -442,7 +442,12 @@ note_on() {
 }
 
 cmd=${0:t}
-[[ $cmd == asleep ]] && set -- stop "$@"
+if [[ $cmd == asleep ]]; then
+  case "${1:-}" in
+    -h|--help|help|-v|--version|version) ;;
+    *) set -- stop "$@" ;;
+  esac
+fi
 
 case "$1" in
   -h|--help|help)

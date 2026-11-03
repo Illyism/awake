@@ -7,6 +7,7 @@ import IOKit
 /// through a sandbox exception; only the app (unsandboxed) runs the script.
 enum AwakeState {
     static var isTransitioning = false
+    static var lastIntentRun = Date.distantPast
 
     private static var home: URL {
         if let dir = getpwuid(getuid())?.pointee.pw_dir {
@@ -90,11 +91,40 @@ enum AwakeState {
             let m = (secs % 3600 + 59) / 60
             return m > 0 ? "\(h)h \(m)m" : "\(h)h"
         }
-        return "\(( max(1, secs) + 59) / 60)m"
+        return "\((max(1, secs) + 59) / 60)m"
     }
 
     static var isSudoRuleInstalled: Bool {
         FileManager.default.fileExists(atPath: "/etc/sudoers.d/awake")
+    }
+
+    static var isCLIInstalled: Bool {
+        let paths = [
+            home.appendingPathComponent(".local/bin/awake").path,
+            "/opt/homebrew/bin/awake",
+            "/usr/local/bin/awake",
+        ]
+        return paths.contains { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    @discardableResult
+    static func installCLISymlinks() -> Bool {
+        guard let bundled = Bundle.main.url(forResource: "awake", withExtension: nil),
+              isTrustedExecutable(bundled)
+        else { return false }
+        let binDir = home.appendingPathComponent(".local/bin")
+        do {
+            try FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+            let awakeDest = binDir.appendingPathComponent("awake")
+            let asleepDest = binDir.appendingPathComponent("asleep")
+            try? FileManager.default.removeItem(at: awakeDest)
+            try? FileManager.default.removeItem(at: asleepDest)
+            try FileManager.default.createSymbolicLink(atPath: awakeDest.path, withDestinationPath: bundled.path)
+            try FileManager.default.createSymbolicLink(atPath: asleepDest.path, withDestinationPath: "awake")
+            return true
+        } catch {
+            return false
+        }
     }
 
     private static func isTrustedExecutable(_ url: URL) -> Bool {

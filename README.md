@@ -62,15 +62,21 @@ Install https://github.com/Illyism/awake on my Mac
 
 ```bash
 brew tap illyism/awake https://github.com/Illyism/awake
-brew install --cask awake
+brew install --cask illyism/awake/awake
 awake setup
 ```
 
-*(Or `brew install illyism/awake/awake` for the CLI formula only.)*
+*(Or `brew install --formula illyism/awake/awake` for the CLI formula only.)*
 
 ### Option 4 — Download DMG
 
-Download **[Awake-1.0.0-macos-arm64.dmg](https://github.com/Illyism/awake/releases/download/v1.0.0/Awake-1.0.0-macos-arm64.dmg)**, drag `Awake.app` to `Applications`, launch it, and click **Enable Lid-Closed Sleep Guard (Touch ID)…** in the menu bar.
+Download **[Awake-1.0.0-macos-arm64.dmg](https://github.com/Illyism/awake/releases/download/v1.0.0/Awake-1.0.0-macos-arm64.dmg)** and drag `Awake.app` to `Applications`. Because the prebuilt DMG is open-source and ad-hoc signed without an Apple Developer ID, clear macOS Gatekeeper quarantine once in Terminal before launching:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Awake.app && open /Applications/Awake.app
+```
+
+Then click **Enable Lid-Closed Sleep Guard (Touch ID)…** in the Awake menu bar icon.
 
 ### Option 5 — Nix (`flake.nix` / `nix-darwin`)
 

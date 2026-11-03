@@ -57,8 +57,6 @@ fi
 
 mkdir -p "$DIST" "$WORK/staging/.background"
 /usr/bin/ditto "$APP_BUNDLE" "$WORK/staging/Awake.app"
-cp "$ROOT/awake" "$WORK/staging/awake"
-chmod +x "$WORK/staging/awake"
 ln -s /Applications "$WORK/staging/Applications"
 if [ -f "$BG_TIFF" ]; then
   cp "$BG_TIFF" "$WORK/staging/.background/background.tiff"

@@ -1,9 +1,8 @@
 class Awake < Formula
-  desc "Keep your MacBook awake with the lid closed, with battery and thermal safety guards"
+  desc "Keep your MacBook awake with the lid closed, with battery and thermal guards"
   homepage "https://il.ly/awake"
   url "https://github.com/Illyism/awake/archive/refs/tags/v1.0.0.tar.gz"
   sha256 "cac9af1d3df83c41936f15a116e5d99bef0dd91df586fc04c4c600b0a1f47dba"
-  version "1.0.0"
   license "MIT"
   head "https://github.com/Illyism/awake.git", branch: "main"
 
@@ -20,8 +19,8 @@ class Awake < Formula
       To let `awake` and `asleep` toggle lid sleep (`pmset disablesleep 0/1`) without a password prompt, run once:
         awake setup
 
-      To also build and install the macOS Control Center & Menu Bar app (`Awake.app`):
-        curl -fsSL https://il.ly/awake/install.sh | sh
+      To also install the macOS Control Center & Menu Bar app (`Awake.app`):
+        brew install --cask illyism/awake/awake
     EOS
   end
 

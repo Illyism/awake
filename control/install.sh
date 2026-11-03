@@ -7,7 +7,17 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 REPO_DIR="$(cd .. && pwd)"
-APP_DEST="${AWAKE_APP_DIR:-$HOME/Applications}/Awake.app"
+
+if ! xcodebuild -version >/dev/null 2>&1; then
+  echo "Full Xcode is not active; delegating to ./install.sh to install prebuilt Awake.app..."
+  exec "$REPO_DIR/install.sh"
+fi
+
+DEFAULT_APP_DIR="$HOME/Applications"
+if [ -d "/Applications/Awake.app" ] && [ -w "/Applications" ]; then
+  DEFAULT_APP_DIR="/Applications"
+fi
+APP_DEST="${AWAKE_APP_DIR:-$DEFAULT_APP_DIR}/Awake.app"
 BIN_DIR="${AWAKE_BIN_DIR:-$HOME/.local/bin}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/awake-build.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -15,6 +25,8 @@ trap 'exit 130' HUP INT TERM
 
 # 1. Link CLI binaries (~/.local/bin/awake and ~/.local/bin/asleep)
 mkdir -p "$BIN_DIR"
+chmod +x "$REPO_DIR/awake"
+xattr -d com.apple.quarantine "$REPO_DIR/awake" 2>/dev/null || true
 ln -sf "$REPO_DIR/awake" "$BIN_DIR/awake"
 ln -sf awake "$BIN_DIR/asleep"
 
@@ -30,10 +42,6 @@ if [ -z "$TEAM" ]; then
       | sed -n 's/.*OU=\([A-Z0-9]\{10\}\).*/\1/p' \
       | head -1 || true)"
   fi
-fi
-
-if command -v xcodegen >/dev/null 2>&1; then
-  xcodegen generate >/dev/null
 fi
 
 if [ -n "$TEAM" ]; then
@@ -54,9 +62,12 @@ killall Awake AwakeControl 2>/dev/null || true
 mkdir -p "$(dirname "$APP_DEST")"
 rm -rf "$APP_DEST"
 /usr/bin/ditto "$APP" "$APP_DEST"
+xattr -dr com.apple.quarantine "$APP_DEST" 2>/dev/null || true
 open -g "$APP_DEST"
 "$APP_DEST/Contents/MacOS/Awake" --reload 2>/dev/null || true
 
 echo "Installed $APP_DEST"
 echo "Linked $BIN_DIR/awake and $BIN_DIR/asleep"
-echo "Add to Control Center: Control Center > Edit Controls > search \"Awake\"."
+if [ -n "$TEAM" ]; then
+  echo "Add to Control Center: Control Center > Edit Controls > search \"Awake\"."
+fi

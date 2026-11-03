@@ -1,6 +1,6 @@
 cask "awake" do
   version "1.0.0"
-  sha256 "90f713c98556e4f3cf806511ff9b537144fee006577b8a4c215ef191eff98b7d"
+  sha256 "9977540fb1664b1090c896317f3496cf8d8a16c45a2ba0457a9c5e045dac28f0"
 
   url "https://github.com/Illyism/awake/releases/download/v#{version}/Awake-#{version}-macos-arm64.dmg"
   name "Awake"
@@ -8,18 +8,22 @@ cask "awake" do
   homepage "https://il.ly/awake"
 
   depends_on arch: :arm64
-  depends_on macos: ">= :tahoe"
+  depends_on macos: :tahoe
 
   app "Awake.app"
   binary "#{appdir}/Awake.app/Contents/Resources/awake", target: "awake"
   binary "#{appdir}/Awake.app/Contents/Resources/awake", target: "asleep"
 
-  uninstall script: {
-              executable: "#{appdir}/Awake.app/Contents/Resources/awake",
-              args:       ["stop"],
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Awake.app"]
+  end
+
+  uninstall quit:   "com.illyism.awake",
+            script: {
+              executable: "/bin/zsh",
+              args:       ["#{appdir}/Awake.app/Contents/Resources/awake", "stop"],
               sudo:       false,
-            },
-            quit:   "com.illyism.awake"
+            }
 
   zap trash: [
     "~/.cache/awake",

@@ -6,10 +6,10 @@
 #   ./install.sh [uninstall]
 set -eu
 
-AWAKE_VERSION="1.0.1"
+AWAKE_VERSION="1.0.2"
 REPO_TARBALL="https://github.com/Illyism/awake/archive/refs/tags/v${AWAKE_VERSION}.tar.gz"
 RELEASE_ZIP_URL="https://github.com/Illyism/awake/releases/download/v${AWAKE_VERSION}/Awake-${AWAKE_VERSION}-macos-arm64.zip"
-RELEASE_ZIP_SHA256="b96b1f8e86e6f58706c967308d0b8c26b08a3bec0b70dce8a647a7cb4a663030"
+RELEASE_ZIP_SHA256="7634aef30099ac61c6759d9fcee726b350604530845f8e64463ad760a9d8fa3b"
 
 INSTALL_BIN_DIR="${AWAKE_BIN_DIR:-$HOME/.local/bin}"
 SHARE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/awake"

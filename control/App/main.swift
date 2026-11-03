@@ -116,6 +116,8 @@ final class Monitor: NSObject, NSApplicationDelegate, NSMenuDelegate {
         welcome.refresh()
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        // Cooperative activation is refused when the launcher keeps focus (Terminal, Raycast).
+        window.orderFrontRegardless()
         // The status item gets its final menu bar position a moment after it is created.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.welcome.refresh() }
     }

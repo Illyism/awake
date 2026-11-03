@@ -1,4 +1,11 @@
 <!doctype html>
+<!-- Installer window background, 660×400 pt. Rendered at 1× and 2× into
+     background.tiff. Finder draws the icons and their labels on top:
+     Awake.app at (170, 178), Applications at (490, 178), 128 pt.
+     Because macOS Finder draws icon labels in dark text over custom DMG
+     backgrounds, the canvas uses warm stone paper (#f8f7f4 -> #efeee9)
+     with radial masks keeping the two icons, their labels, the arrow,
+     and the bottom tactile keycap row completely clear. -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -8,74 +15,204 @@
       width: 660px;
       height: 400px;
       overflow: hidden;
-      background: radial-gradient(circle at 50% 38%, rgba(245, 158, 11, 0.14), rgba(7, 7, 7, 1) 68%), #070707;
-      color: #f2f2ef;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+      background: linear-gradient(180deg, #f8f7f4 0%, #eeede8 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
       position: relative;
     }
-    .grid {
+
+    /* Subtle warm amber ambient glow behind the left Awake icon and center arrow */
+    .glow {
       position: absolute;
       inset: 0;
-      background-image:
-        linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
-      background-size: 30px 30px;
-      mask-image: radial-gradient(ellipse at 50% 45%, black 30%, transparent 80%);
+      background:
+        radial-gradient(circle 130px at 170px 172px, rgba(245, 158, 11, 0.10), transparent 75%),
+        radial-gradient(circle 110px at 330px 178px, rgba(245, 158, 11, 0.07), transparent 75%);
+      pointer-events: none;
     }
-    .title {
+
+    /* Faint struck-out clamshell sleep failures in the background, masked clear around icons & text */
+    .sleep-log {
       position: absolute;
-      top: 34px;
+      left: 0;
+      top: 6px;
+      width: 960px;
+      white-space: nowrap;
+      font: 11.5px/23px ui-monospace, "SF Mono", Menlo, monospace;
+      color: #d5d4ce;
+      user-select: none;
+      -webkit-mask-image:
+        radial-gradient(ellipse 138px 124px at 170px 196px, transparent 64%, #000 100%),
+        radial-gradient(ellipse 138px 124px at 490px 196px, transparent 64%, #000 100%),
+        radial-gradient(ellipse 104px 38px at 330px 178px, transparent 62%, #000 100%),
+        linear-gradient(#000 264px, transparent 284px, transparent 376px, #000 392px);
+      -webkit-mask-composite: source-in;
+      mask-composite: intersect;
+    }
+    .sleep-log p { margin: 0; }
+    .sleep-log s {
+      text-decoration-thickness: 1px;
+      margin-right: 2.1em;
+    }
+
+    /* Center arrow between Awake.app (170, 178) and Applications (490, 178) */
+    svg.arrow {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* Bottom callout bar with tactile 3D Awake keycap */
+    .bottom-bar {
+      position: absolute;
       left: 0;
       right: 0;
-      text-align: center;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: rgba(242, 242, 239, 0.55);
-    }
-    .arrow {
-      position: absolute;
-      top: 174px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 288px;
+      height: 78px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      color: #f59e0b;
-      filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.45));
+      justify-content: center;
+      gap: 14px;
     }
-    .footer {
+
+    .keycap {
+      position: relative;
+      width: 74px;
+      height: 52px;
+      border-radius: 12px;
+      background: #070709;
+      box-shadow:
+        0 10px 22px rgba(20, 18, 14, 0.22),
+        0 3px 6px rgba(20, 18, 14, 0.16),
+        0 0 0 1px rgba(0, 0, 0, 0.35);
+      flex: none;
+    }
+    .keycap__cap {
       position: absolute;
-      bottom: 28px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 12px;
-      color: rgba(242, 242, 239, 0.42);
+      inset: 2px 3px 5px;
+      border-radius: 9px;
+      background: linear-gradient(180deg, #2a2d35 0%, #16181f 55%, #0b0c10 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 6px 8px 5px;
+    }
+    .keycap__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .keycap__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #f59e0b;
+      box-shadow: 0 0 6px #f59e0b;
+    }
+    .keycap__cup {
+      width: 12px;
+      height: 12px;
+      stroke: #fbbf24;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .keycap__bottom {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    }
+    .keycap__label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #f2f2ef;
       letter-spacing: -0.01em;
     }
-    .footer code {
+    .keycap__state {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      color: rgba(245, 158, 11, 0.85);
-      background: rgba(245, 158, 11, 0.1);
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid rgba(245, 158, 11, 0.2);
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #fbbf24;
+      text-transform: uppercase;
+    }
+
+    .copy {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .headline {
+      font-size: 16.5px;
+      font-weight: 620;
+      color: #1c1c1f;
+      letter-spacing: -0.01em;
+    }
+    .subline {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: #6e6d68;
+      letter-spacing: -0.01em;
+    }
+    .subline strong {
+      color: #b45309;
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
-  <div class="grid"></div>
-  <div class="title">Awake for macOS</div>
-  <div class="arrow">
-    <svg width="68" height="24" viewBox="0 0 68 24" fill="none">
-      <path d="M4 12H60M52 5L61 12L52 19" stroke="#F59E0B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
+  <div class="glow"></div>
+
+  <div class="sleep-log">
+    <p style="margin-left:-110px"><s>clamshell sleep triggered</s> <s>ssh: connection reset by peer</s> <s>caffeinate: lid closed, sleeping anyway</s> <s>agent stream disconnected</s></p>
+    <p style="margin-left:-45px"><s>wifi dropped on battery</s> <s>error: network connection lost</s> <s>claude code: request timed out</s> <s>pmset: system will sleep</s></p>
+    <p style="margin-left:-160px"><s>codex exec: broken pipe</s> <s>caffeinate -i ignored on lid close</s> <s>loginwindow left unlocked</s> <s>backpack temp 48C</s></p>
+    <p style="margin-left:-80px"><s>clamshell sleep triggered</s> <s>wifi power-save disconnect</s> <s>ssh: connection reset by peer</s> <s>cursor agent interrupted</s></p>
+    <p style="margin-left:-130px"><s>battery drained to 0% in bag</s> <s>caffeinate: lid closed, sleeping anyway</s> <s>error: network connection lost</s> <s>stream aborted</s></p>
+    <p style="margin-left:-20px"><s>ssh: connection reset by peer</s> <s>clamshell sleep triggered</s> <s>wifi dropped on battery</s> <s>pmset: clamshell sleep</s></p>
+    <p style="margin-left:-95px"><s>agent stream disconnected</s> <s>caffeinate -i ignored on lid close</s> <s>claude code: request timed out</s> <s>broken pipe</s></p>
+    <p style="margin-left:-175px"><s>wifi dropped on battery</s> <s>loginwindow left unlocked</s> <s>clamshell sleep triggered</s> <s>ssh: connection reset by peer</s></p>
+    <p style="margin-left:-60px"><s>caffeinate: lid closed, sleeping anyway</s> <s>error: network connection lost</s> <s>codex exec: broken pipe</s> <s>sleep triggered</s></p>
+    <p style="margin-left:-140px"><s>clamshell sleep triggered</s> <s>ssh: connection reset by peer</s> <s>agent stream disconnected</s> <s>wifi dropped on battery</s></p>
+    <p style="margin-left:-30px"><s>error: network connection lost</s> <s>caffeinate -i ignored on lid close</s> <s>pmset: system will sleep</s> <s>stream aborted</s></p>
+    <p style="margin-left:-115px"><s>wifi dropped on battery</s> <s>clamshell sleep triggered</s> <s>ssh: connection reset by peer</s> <s>claude code: request timed out</s></p>
+    <p style="margin-left:-70px"><s>agent stream disconnected</s> <s>loginwindow left unlocked</s> <s>caffeinate: lid closed, sleeping anyway</s> <s>broken pipe</s></p>
+    <p style="margin-left:-150px"><s>clamshell sleep triggered</s> <s>wifi dropped on battery</s> <s>error: network connection lost</s> <s>ssh: connection reset by peer</s></p>
+    <p style="margin-left:-25px"><s>caffeinate -i ignored on lid close</s> <s>codex exec: broken pipe</s> <s>clamshell sleep triggered</s> <s>agent stream disconnected</s></p>
+    <p style="margin-left:-105px"><s>ssh: connection reset by peer</s> <s>error: network connection lost</s> <s>wifi dropped on battery</s> <s>pmset: clamshell sleep</s></p>
+    <p style="margin-left:-55px"><s>clamshell sleep triggered</s> <s>caffeinate: lid closed, sleeping anyway</s> <s>agent stream disconnected</s> <s>broken pipe</s></p>
   </div>
-  <div class="footer">
-    Drag <strong>Awake</strong> to <strong>Applications</strong>, or run <code>curl -fsSL https://il.ly/awake/install.sh | sh</code>
+
+  <svg class="arrow" width="660" height="400" viewBox="0 0 660 400">
+    <g fill="none" stroke="#8e8d86" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M268 178 H392" />
+      <path d="M382 170 L392 178 L382 186" stroke="#d97706" />
+    </g>
+  </svg>
+
+  <div class="bottom-bar">
+    <div class="keycap">
+      <div class="keycap__cap">
+        <div class="keycap__top">
+          <span class="keycap__dot"></span>
+          <svg class="keycap__cup" viewBox="0 0 24 24">
+            <path d="M17 8h1a4 4 0 1 1 0 8h-1M3 8h14v7a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8Z" />
+          </svg>
+        </div>
+        <div class="keycap__bottom">
+          <span class="keycap__label">awake</span>
+          <span class="keycap__state">on</span>
+        </div>
+      </div>
+    </div>
+    <div class="copy">
+      <div class="headline">Drag Awake to Applications.</div>
+      <div class="subline">Control Center · Menu Bar · CLI · <strong>≤10% batt &amp; ≥40°C lid guard</strong></div>
+    </div>
   </div>
 </body>
 </html>

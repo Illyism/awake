@@ -9,7 +9,7 @@ set -eu
 AWAKE_VERSION="1.0.0"
 REPO_TARBALL="https://github.com/Illyism/awake/archive/refs/tags/v${AWAKE_VERSION}.tar.gz"
 RELEASE_ZIP_URL="https://github.com/Illyism/awake/releases/download/v${AWAKE_VERSION}/Awake-${AWAKE_VERSION}-macos-arm64.zip"
-RELEASE_ZIP_SHA256="cb523e6a09b8ac36e0eec7a15e748721b2416cc9f52ea326afbcf9bd826a7cc4"
+RELEASE_ZIP_SHA256="e143242a561d65002501124a76813c3581ce483239de6a6e8b9715de51dfa6cd"
 
 INSTALL_BIN_DIR="${AWAKE_BIN_DIR:-$HOME/.local/bin}"
 SHARE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/awake"
@@ -205,9 +205,7 @@ printf '\nInstalled Awake %s\n' "$AWAKE_VERSION"
 printf '  CLI:            %s/awake (and asleep)\n' "$INSTALL_BIN_DIR"
 if [ -d "$APP_BUNDLE" ]; then
   printf '  App:            %s (Menu Bar cup icon active)\n' "$APP_BUNDLE"
-  if [ -n "$TEAM" ]; then
-    printf '  Control Center: Control Center -> Edit Controls -> search "Awake"\n'
-  fi
+  printf '  Control Center: Control Center -> Edit Controls -> search "Awake"\n'
 fi
 case ":${PATH:-}:" in
   *":$INSTALL_BIN_DIR:"*) ;;

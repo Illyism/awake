@@ -1,8 +1,8 @@
 class Awake < Formula
   desc "Keep your MacBook awake with the lid closed, with battery and thermal guards"
   homepage "https://il.ly/awake"
-  url "https://github.com/Illyism/awake/archive/refs/tags/v1.0.1.tar.gz"
-  sha256 "6bc3cdbbcb1eae23b432239f13b89fd23534e78ee0a9adc2be6d1d37b8812bad"
+  url "https://github.com/Illyism/awake/archive/refs/tags/v1.0.2.tar.gz"
+  sha256 "1dc682c1ecf478d6fb74d446ffc0859243b5bdfc166647f53dd7197092565bff"
   license "MIT"
   head "https://github.com/Illyism/awake.git", branch: "main"
 
